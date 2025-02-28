@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doom Fire Animation</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        header {
+            color: #ff6400;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        h1 {
+            font-size: clamp(1.5rem, 4vw, 3rem);
+            margin: 0;
+            text-shadow: 0 0 10px rgba(255, 100, 0, 0.7);
+        }
+        
+        #fireCanvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            width: 100%;
+            max-width: 1200px;
+            height: auto;
+            margin-bottom: 20px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        button {
+            background-color: #ff6400;
+            color: black;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background-color: #ff8c40;
+            transform: translateY(-2px);
+        }
+        
+        @media (max-width: 600px) {
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>DOOM FIRE EFFECT</h1>
+    </header>
+    
+    <canvas id="fireCanvas"></canvas>
+    
+    <div class="controls">
+        <button id="increaseIntensity">Increase Intensity</button>
+        <button id="decreaseIntensity">Decrease Intensity</button>
+        <button id="toggleAnimation">Pause/Resume</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const canvas = document.getElementById('fireCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Configuration
+            let config = {
+                pixelSize: 4,
+                fireWidth: 0,
+                fireHeight: 0,
+                intensityDecay: 3,
+                windFactor: 1.2,
+                paused: false,
+                intensity: 36
+            };
+            
+            // Doom fire color palette
+            const fireColorsPalette = [
+                {"r":7,"g":7,"b":7},
+                {"r":31,"g":7,"b":7},
+                {"r":47,"g":15,"b":7},
+                {"r":71,"g":15,"b":7},
+                {"r":87,"g":23,"b":7},
+                {"r":103,"g":31,"b":7},
+                {"r":119,"g":31,"b":7},
+                {"r":143,"g":39,"b":7},
+                {"r":159,"g":47,"b":7},
+                {"r":175,"g":63,"b":7},
+                {"r":191,"g":71,"b":7},
+                {"r":199,"g":71,"b":7},
+                {"r":223,"g":79,"b":7},
+                {"r":223,"g":87,"b":7},
+                {"r":223,"g":87,"b":7},
+                {"r":215,"g":95,"b":7},
+                {"r":215,"g":95,"b":7},
+                {"r":215,"g":103,"b":15},
+                {"r":207,"g":111,"b":15},
+                {"r":207,"g":119,"b":15},
+                {"r":207,"g":127,"b":15},
+                {"r":207,"g":135,"b":23},
+                {"r":199,"g":135,"b":23},
+                {"r":199,"g":143,"b":23},
+                {"r":199,"g":151,"b":31},
+                {"r":191,"g":159,"b":31},
+                {"r":191,"g":159,"b":31},
+                {"r":191,"g":167,"b":39},
+                {"r":191,"g":167,"b":39},
+                {"r":191,"g":175,"b":47},
+                {"r":183,"g":175,"b":47},
+                {"r":183,"g":183,"b":47},
+                {"r":183,"g":183,"b":55},
+                {"r":207,"g":207,"b":111},
+                {"r":223,"g":223,"b":159},
+                {"r":239,"g":239,"b":199},
+                {"r":255,"g":255,"b":255}
+            ];
+            
+            let firePixelsArray = [];
+            
+            // Initialize fire based on screen size
+            function initializeFireCanvas() {
+                // Calculate dimensions based on viewport
+                const viewportWidth = window.innerWidth;
+                
+                // Adjust pixel size based on screen size
+                config.pixelSize = viewportWidth < 600 ? 2 : 
+                                  viewportWidth < 1024 ? 3 : 4;
+                
+                // Set canvas dimensions
+                const maxWidth = Math.min(viewportWidth, 1200);
+                config.fireWidth = Math.floor(maxWidth / config.pixelSize);
+                config.fireHeight = Math.floor((window.innerHeight * 0.5) / config.pixelSize);
+                
+                // Set actual canvas size
+                canvas.width = config.fireWidth * config.pixelSize;
+                canvas.height = config.fireHeight * config.pixelSize;
+                
+                // Create fire data structure
+                const numberOfPixels = config.fireWidth * config.fireHeight;
+                firePixelsArray = new Array(numberOfPixels).fill(0);
+                
+                // Set the bottom row to maximum intensity
+                for (let column = 0; column < config.fireWidth; column++) {
+                    const pixelIndex = (config.fireHeight - 1) * config.fireWidth + column;
+                    firePixelsArray[pixelIndex] = config.intensity;
+                }
+            }
+            
+            function calculateFirePropagation() {
+                if (config.paused) return;
+                
+                for (let column = 0; column < config.fireWidth; column++) {
+                    for (let row = 0; row < config.fireHeight - 1; row++) {
+                        const currentPixelIndex = row * config.fireWidth + column;
+                        
+                        // Calculate wind effect
+                        const windOffset = Math.floor(Math.random() * config.windFactor);
+                        const belowPixelIndex = currentPixelIndex + config.fireWidth;
+                        
+                        // Ensure we don't go out of bounds with wind
+                        const targetColumn = column - windOffset;
+                        const targetPixelIndex = currentPixelIndex - windOffset;
+                        
+                        if (targetColumn < 0) continue;
+                        
+                        // Use the intensity of the pixel below, minus decay
+                        const decay = Math.floor(Math.random() * config.intensityDecay);
+                        const belowPixelFireIntensity = firePixelsArray[belowPixelIndex];
+                        const newFireIntensity = belowPixelFireIntensity - decay >= 0 ? belowPixelFireIntensity - decay : 0;
+                        
+                        firePixelsArray[targetPixelIndex] = newFireIntensity;
+                    }
+                }
+            }
+            
+            function renderFire() {
+                // Clear the canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                for (let row = 0; row < config.fireHeight; row++) {
+                    for (let column = 0; column < config.fireWidth; column++) {
+                        const pixelIndex = row * config.fireWidth + column;
+                        const fireIntensity = firePixelsArray[pixelIndex];
+                        const color = fireColorsPalette[fireIntensity];
+                        
+                        // Draw the pixel
+                        ctx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
+                        ctx.fillRect(
+                            column * config.pixelSize,
+                            row * config.pixelSize,
+                            config.pixelSize,
+                            config.pixelSize
+                        );
+                    }
+                }
+            }
+            
+            function increaseIntensity() {
+                if (config.intensity < 36) {
+                    config.intensity++;
+                    updateFireSource();
+                }
+            }
+            
+            function decreaseIntensity() {
+                if (config.intensity > 0) {
+                    config.intensity--;
+                    updateFireSource();
+                }
+            }
+            
+            function updateFireSource() {
+                // Update the bottom row with the new intensity
+                for (let column = 0; column < config.fireWidth; column++) {
+                    const pixelIndex = (config.fireHeight - 1) * config.fireWidth + column;
+                    firePixelsArray[pixelIndex] = config.intensity;
+                }
+            }
+            
+            function toggleAnimation() {
+                config.paused = !config.paused;
+            }
+            
+            // Event listeners for buttons
+            document.getElementById('increaseIntensity').addEventListener('click', increaseIntensity);
+            document.getElementById('decreaseIntensity').addEventListener('click', decreaseIntensity);
+            document.getElementById('toggleAnimation').addEventListener('click', toggleAnimation);
+            
+            // Handle window resize
+            window.addEventListener('resize', function() {
+                initializeFireCanvas();
+            });
+            
+            // Initialize and start the animation
+            initializeFireCanvas();
+            
+            function animationLoop() {
+                calculateFirePropagation();
+                renderFire();
+                requestAnimationFrame(animationLoop);
+            }
+            
+            animationLoop();
+        });
+    </script>
+</body>
+</html>
